@@ -1,0 +1,112 @@
+workflows:
+  ios-workflow:
+    name: iOS Workflow
+    instance_type: mac_mini_m1
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.yourcompany.belugachat
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Set up code signing settings
+        script: |
+          echo "Setting up code signing..."
+          # Tự động xử lý bởi Codemagic theo cấu hình của bạn
+      - name: Flutter packages get
+        script: |
+          $FLUTTER_ROOT/bin/flutter packages pub get
+      - name: Install pods
+        script: |
+          find . -name "Podfile" -execdir pod install \;
+      - name: Flutter build ipa
+        script: |
+          $FLUTTER_ROOT/bin/flutter build ipa --release \
+            --build-name=1.0.0 \
+            --build-number=$(($(date +%s)/10)) \
+            --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - flutter_drive.log
+    publishing:
+      email:
+        recipients:
+          - your.email@example.com
+      app_store_connect:
+        auth: integration
+        submit_to_app_store: false
+        submit_to_testflight: true
+
+  ios-unsigned-workflow:
+    name: iOS Unsigned IPA
+    instance_type: mac_mini_m1
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Flutter packages get
+        script: |
+          $FLUTTER_ROOT/bin/flutter packages pub get
+      - name: Install pods
+        script: |
+          find . -name "Podfile" -execdir pod install \;
+      - name: Build iOS without signing
+        script: |
+          # Tạo thư mục lưu IPA
+          mkdir -p build/ios/unsigned_ipa
+          
+          # Build ứng dụng iOS thành file .app không ký số
+          $FLUTTER_ROOT/bin/flutter build ios --release --no-codesign
+          
+          # Di chuyển vào thư mục build
+          cd build/ios/iphoneos
+          
+          # Tạo thư mục Payload (cần thiết cho cấu trúc IPA)
+          mkdir -p Payload
+          
+          # Sao chép file .app vào thư mục Payload
+          cp -r Runner.app Payload/
+          
+          # Tùy chọn: Thay đổi Info.plist để tắt các yêu cầu ký số (nếu cần)
+          # /usr/libexec/PlistBuddy -c "Delete :CodeSignInfo" Payload/Runner.app/Info.plist 2>/dev/null || true
+          
+          # Tạo file IPA không ký số (zip với cấu trúc Payload)
+          zip -r ../unsigned_ipa/app-unsigned.ipa Payload
+          
+          # Thêm metadata (tùy chọn)
+          mkdir -p iTunesArtwork
+          mkdir -p iTunesMetadata
+          # Có thể thêm hình ảnh icon và metadata nếu cần
+          
+          # Tăng cường bảo mật cấu trúc IPA bằng cách thêm các thư mục cần thiết
+          # zip -r ../unsigned_ipa/app-unsigned.ipa Payload iTunesArtwork iTunesMetadata
+          
+          echo "Unsigned IPA đã được tạo tại build/ios/unsigned_ipa/app-unsigned.ipa"
+          ls -la ../unsigned_ipa/
+    artifacts:
+      - build/ios/unsigned_ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - flutter_drive.log
+    publishing:
+      email:
+        recipients:
+          - your.email@example.com
+
+  flutter-test:
+    name: Flutter Test
+    instance_type: mac_mini_m1
+    environment:
+      flutter: stable
+    scripts:
+      - name: Get Flutter packages
+        script: $FLUTTER_ROOT/bin/flutter packages pub get
+      - name: Run Flutter tests
+        script: $FLUTTER_ROOT/bin/flutter test
+      - name: Flutter analyze
+        script: $FLUTTER_ROOT/bin/flutter analyze
+    artifacts:
+      - flutter_drive.log
+      - build/reports/tests/* 
